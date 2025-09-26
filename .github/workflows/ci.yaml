@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.18.0
+      - run: npm ci
+
+      - name: Run ESLint
+        run: npx eslint . --ext .ts,.html
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Check coverage threshold
+        uses: VeryGoodOpenSource/very_good_coverage@v2
+        with:
+          path: coverage/lcov.info
+          min_coverage: 90
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+  build:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.18.0
+      - run: npm ci
+      - run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: angular-build
+          path: www/
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build Docker image
+        run: docker build -t my-angular-app .
+
+      - name: Run container
+        run: docker run -d -p 8080:80 --name angular-container my-angular-app
+
+      - name: Validate container is running
+        run: curl --fail http://localhost:8080
